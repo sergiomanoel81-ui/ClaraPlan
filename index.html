@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClaraPlan - Planner de Hábitos</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <!-- Tela de Código de Acesso -->
+    <div class="auth-container" id="auth-container">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <h1>ClaraPlan</h1>
+                <p>Organize seus hábitos e tarefas</p>
+            </div>
+            
+            <form id="codigo-form" class="auth-form">
+                <h2>Digite seu Código de Acesso</h2>
+                <p style="color: #666; font-size: 14px; margin-bottom: 24px;">
+                    Use o mesmo código em qualquer dispositivo para acessar seus dados.
+                </p>
+                
+                <div class="form-group">
+                    <input 
+                        type="text" 
+                        id="input-codigo" 
+                        placeholder="Seu código (mín. 4 caracteres)" 
+                        required 
+                        minlength="4"
+                        style="text-align: center; font-size: 18px; letter-spacing: 2px;"
+                    >
+                </div>
+                
+                <button type="submit" class="btn-primary btn-full">Entrar</button>
+            </form>
+            
+            <div id="auth-loading" style="display: none; text-align: center; padding: 40px;">
+                <div class="loading-spinner"></div>
+                <p style="margin-top: 20px;">Carregando seus dados...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Principal -->
+    <div class="container" id="app-container" style="display: none;">
+        <!-- Barra de Usuário -->
+        <div class="user-bar">
+            <div class="user-info">
+                <span id="user-email"></span>
+            </div>
+            <button class="btn-secondary btn-small" id="btn-logout">Sair</button>
+        </div>
+        
+        <!-- Navegação -->
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="visao-diaria">Visão Diária</button>
+            <button class="tab-btn" data-tab="habitos">Hábitos</button>
+            <button class="tab-btn" data-tab="tarefas">Tarefas</button>
+            <button class="tab-btn" data-tab="categorias">Categorias</button>
+        </nav>
+
+        <!-- Aba Visão Diária -->
+        <div class="tab-content active" id="visao-diaria">
+            <div class="card">
+                <h2 id="data-atual"></h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number" id="habitos-hoje-total">0</span>
+                        <span class="stat-label">Hábitos Hoje</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="habitos-concluidos">0</span>
+                        <span class="stat-label">Concluídos</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="tarefas-hoje-total">0</span>
+                        <span class="stat-label">Tarefas Hoje</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>Hábitos de Hoje</h3>
+                <div id="habitos-hoje-lista" class="lista-items"></div>
+            </div>
+
+            <div class="section">
+                <h3>Tarefas de Hoje</h3>
+                <div id="tarefas-hoje-lista" class="lista-items"></div>
+            </div>
+
+            <div class="section">
+                <h3>Progresso por Categoria</h3>
+                <canvas id="grafico-categorias"></canvas>
+            </div>
+
+            <div class="section">
+                <h3>Próximos Eventos</h3>
+                <div id="proximos-eventos" class="lista-items"></div>
+            </div>
+        </div>
+
+        <!-- Aba Hábitos -->
+        <div class="tab-content" id="habitos">
+            <div class="section-header">
+                <h2>Meus Hábitos</h2>
+                <button class="btn-primary" id="btn-add-habito">+ Adicionar Hábito</button>
+            </div>
+            <div id="lista-habitos" class="lista-items"></div>
+        </div>
+
+        <!-- Aba Tarefas -->
+        <div class="tab-content" id="tarefas">
+            <div class="section-header">
+                <h2>Minhas Tarefas</h2>
+                <button class="btn-primary" id="btn-add-tarefa">+ Adicionar Tarefa</button>
+            </div>
+            <div id="calendario-container"></div>
+            <div id="lista-tarefas" class="lista-items"></div>
+        </div>
+
+        <!-- Aba Categorias -->
+        <div class="tab-content" id="categorias">
+            <div class="section-header">
+                <h2>Categorias</h2>
+                <button class="btn-primary" id="btn-add-categoria">+ Adicionar Categoria</button>
+            </div>
+            <div id="lista-categorias" class="lista-items"></div>
+            
+            <div class="export-section">
+                <h3>Gerenciar Dados</h3>
+                <div class="export-buttons">
+                    <button class="btn-secondary" id="btn-exportar">Exportar JSON</button>
+                    <label class="btn-secondary" for="file-importar">Importar JSON</label>
+                    <input type="file" id="file-importar" accept=".json" style="display: none;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Adicionar/Editar Hábito -->
+    <div class="modal" id="modal-habito">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modal-habito-titulo">Adicionar Hábito</h2>
+            <form id="form-habito">
+                <div class="form-group">
+                    <label>Nome do Hábito</label>
+                    <input type="text" id="habito-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>Meta de Dias</label>
+                    <input type="number" id="habito-meta" min="1" value="21" required>
+                </div>
+                <div class="form-group">
+                    <label>Categoria</label>
+                    <select id="habito-categoria" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Horário Sugerido</label>
+                    <input type="time" id="habito-horario" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-habito">Cancelar</button>
+                    <button type="submit" class="btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Adicionar/Editar Tarefa -->
+    <div class="modal" id="modal-tarefa">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modal-tarefa-titulo">Adicionar Tarefa</h2>
+            <form id="form-tarefa">
+                <div class="form-group">
+                    <label>Título</label>
+                    <input type="text" id="tarefa-titulo" required>
+                </div>
+                <div class="form-group">
+                    <label>Data</label>
+                    <input type="date" id="tarefa-data" required>
+                </div>
+                <div class="form-group">
+                    <label>Hora</label>
+                    <input type="time" id="tarefa-hora" required>
+                </div>
+                <div class="form-group">
+                    <label>Prioridade</label>
+                    <select id="tarefa-prioridade" required>
+                        <option value="alta">Alta</option>
+                        <option value="media">Média</option>
+                        <option value="baixa">Baixa</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-tarefa">Cancelar</button>
+                    <button type="submit" class="btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Adicionar/Editar Categoria -->
+    <div class="modal" id="modal-categoria">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modal-categoria-titulo">Adicionar Categoria</h2>
+            <form id="form-categoria">
+                <div class="form-group">
+                    <label>Nome da Categoria</label>
+                    <input type="text" id="categoria-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>Cor</label>
+                    <input type="color" id="categoria-cor" value="#3498db" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-categoria">Cancelar</button>
+                    <button type="submit" class="btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação -->
+    <div class="modal" id="modal-confirmar">
+        <div class="modal-content modal-small">
+            <h3 id="confirmar-mensagem">Tem certeza?</h3>
+            <div class="form-actions">
+                <button class="btn-secondary" id="btn-cancelar-confirmar">Cancelar</button>
+                <button class="btn-danger" id="btn-confirmar-acao">Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="firebase-config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
